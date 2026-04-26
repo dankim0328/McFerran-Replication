@@ -73,6 +73,12 @@ forvalues w = 1/27 {
             capture replace `var' = . if `var' < 0
         }
         
+        * Prevent 'Don't Know/Refusal' codes (9, 99) from skewing recoded distributions
+        local ordinal_vars feeling_poor_raw socializing_raw health_raw life_sat_raw hardship_raw
+        foreach var of local ordinal_vars {
+            capture replace `var' = . if `var' >= 9
+        }
+        
         * Save to temp local memory
         tempfile wave`w'
         save "`wave`w''"
@@ -109,10 +115,11 @@ gen log_income = ln(income + 1)
 * Determine Metro Resident (1=Seoul, 4=Incheon, 8=Gyeonggi based on KLIPS Codebook)
 gen is_metro = inlist(region_code, 1, 4, 8)
 
+* Financial Hardship Dummy
+gen financial_hardship = (hardship_raw == 1) if !missing(hardship_raw)
 
 * 5. Final Export for Python Intake
 display "Exporting long-format master data to CSV..."
-local export_path "C:\Users\home\Desktop\McFerran_Replication\klips_master_mcferran.csv"
-export delimited using "`export_path'", replace
+export delimited using "klips_master_mcferran.csv", replace
 
-display "Pipeline Complete! Master file saved at: `export_path'"
+display "Pipeline Complete! Master file saved locally."
