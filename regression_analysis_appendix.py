@@ -1,6 +1,8 @@
 """
-McFerran Replication: Table 2 — Panel FE, BE, & Income Quartile Split (v5)
+McFerran Replication: Appendix — Panel FE, BE, & Income Quartile Split (v5)
 ==============================================================================
+Robustness Check: IV = feeling_poor_h (Household-Level Subjective Poverty)
+
 Replicating McFerran et al. (2025) Table 2 methodology:
   M6:  Fixed Effects (Full Sample)
   M7:  Between-Effects (Full Sample)
@@ -24,7 +26,8 @@ DATA_PATH = "klips_master_mcferran_v5.csv"
 # 1. Data Loading & Panel Indexing
 # =============================================================================
 print("=" * 80)
-print("Table 2: Panel FE / BE / Income Quartile Analysis (Full 27 Waves)")
+print("APPENDIX: Table 2 (IV = feeling_poor_h)")
+print("Robustness Check — Household-Level Subjective Poverty")
 print("=" * 80)
 
 try:
@@ -45,10 +48,8 @@ print(f"Loaded: {df.shape[0]:,} obs, {df[id_col].nunique():,} individuals")
 # =============================================================================
 # 2. Income Quartile Assignment
 # =============================================================================
-# Use individual-level mean of monthly_income to assign quartiles
 income_col = 'monthly_income'
 if income_col not in df.columns:
-    # Try alternative names
     for alt in ['income', 'hh_income', 'log_income']:
         if alt in df.columns:
             income_col = alt
@@ -56,7 +57,6 @@ if income_col not in df.columns:
 
 print(f"Using '{income_col}' for quartile assignment.")
 
-# Compute per-person average income across all waves
 person_avg_income = df.groupby(id_col)[income_col].mean()
 quartile_labels = pd.qcut(person_avg_income, q=4, labels=[1, 2, 3, 4])
 df['income_quartile'] = df[id_col].map(quartile_labels)
@@ -64,13 +64,12 @@ df['income_quartile'] = df[id_col].map(quartile_labels)
 print(f"\nIncome Quartile Distribution (person-level):")
 print(person_avg_income.groupby(quartile_labels).agg(['count', 'min', 'max', 'mean']).to_string())
 
-# Set panel index
 df = df.set_index([id_col, time_col])
 
 # =============================================================================
 # 3. Variable Definitions
 # =============================================================================
-iv = "feeling_poor"
+iv = "feeling_poor_h"
 
 dvs = {
     "dv1_social_sat": "DV1: Social Satisfaction",
@@ -79,9 +78,7 @@ dvs = {
     "c_freq":         "DV4: Children Meeting Freq",
 }
 
-# FE controls: no time-invariant demographics (age, gender absorbed by entity FE)
 fe_controls = ["std_log_income", "health", "life_sat"]
-# BE controls: include time-invariant demographics
 be_controls = ["std_log_income", "health", "life_sat", "age", "gender"]
 
 def stars(p):
@@ -91,7 +88,6 @@ def stars(p):
 # 4. Model Runner Functions
 # =============================================================================
 def run_fe(data, dv, iv_name, ctrls, label=""):
-    """Fixed Effects (Entity + Time) with Clustered SE."""
     predictors = [iv_name] + ctrls
     needed = [dv] + predictors
     if not all(c in data.columns for c in needed):
@@ -109,7 +105,6 @@ def run_fe(data, dv, iv_name, ctrls, label=""):
 
 
 def run_be(data, dv, iv_name, ctrls, label=""):
-    """Between-Effects OLS (cross-sectional of individual means)."""
     predictors = [iv_name] + ctrls
     needed = [dv] + predictors
     if not all(c in data.columns for c in needed):
@@ -127,7 +122,6 @@ def run_be(data, dv, iv_name, ctrls, label=""):
 
 
 def print_model(res, label, model_name):
-    """Print full coefficient table for a model result."""
     if res is None:
         print(f"  [{model_name}] → Skipped\n")
         return
@@ -154,7 +148,7 @@ for dv, dv_label in dvs.items():
         continue
 
     print(f"\n{'#' * 80}")
-    print(f"### {dv_label}")
+    print(f"### {dv_label}  (IV = {iv})")
     print(f"{'#' * 80}")
 
     # M6: Fixed Effects – Full Sample
@@ -168,19 +162,17 @@ for dv, dv_label in dvs.items():
     # M8–M11: Fixed Effects by Income Quartile
     for q in [1, 2, 3, 4]:
         q_label = {1: "Bottom 25%", 2: "25-50%", 3: "50-75%", 4: "Top 25%"}[q]
-        model_num = q + 7  # M8, M9, M10, M11
+        model_num = q + 7
         df_q = df[df['income_quartile'] == q]
-
-        # For quartile splits, exclude std_log_income (within-quartile income variation is limited)
         q_controls = ["health", "life_sat"]
         res_q = run_fe(df_q, dv, iv, q_controls, label=f"M{model_num}-Q{q}")
         print_model(res_q, f"FE – {q_label} (Q{q})", f"M{model_num}")
 
 # =============================================================================
-# 6. Summary Comparison Table (feeling_poor coefficient across all models)
+# 6. Summary Comparison Table
 # =============================================================================
 print(f"\n{'=' * 80}")
-print("SUMMARY: feeling_poor coefficient across all models & DVs")
+print(f"SUMMARY: {iv} coefficient across all models & DVs")
 print(f"{'=' * 80}\n")
 
 header = f"{'DV':<20}"
@@ -193,10 +185,8 @@ print("-" * (20 + 13 * len(model_labels)))
 for dv, dv_label in dvs.items():
     if dv not in df.columns:
         continue
-
     row = f"{dv:<20}"
 
-    # M6: FE Full
     res6 = run_fe(df, dv, iv, fe_controls, label="summary")
     if res6 and iv in res6.params.index:
         c = res6.params[iv]; p = res6.pvalues[iv]
@@ -204,7 +194,6 @@ for dv, dv_label in dvs.items():
     else:
         row += f" {'N/A':>12}"
 
-    # M7: BE Full
     res7 = run_be(df, dv, iv, be_controls, label="summary")
     if res7 and iv in res7.params.index:
         c = res7.params[iv]; p = res7.pvalues[iv]
@@ -212,7 +201,6 @@ for dv, dv_label in dvs.items():
     else:
         row += f" {'N/A':>12}"
 
-    # M8-M11: Quartiles
     for q in [1, 2, 3, 4]:
         df_q = df[df['income_quartile'] == q]
         q_controls = ["health", "life_sat"]
@@ -222,7 +210,6 @@ for dv, dv_label in dvs.items():
             row += f" {c:>8.4f}{stars(p):3s}"
         else:
             row += f" {'N/A':>12}"
-
     print(row)
 
 print(f"\n{'=' * 80}")
