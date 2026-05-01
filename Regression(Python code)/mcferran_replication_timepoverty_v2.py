@@ -56,14 +56,14 @@ except FileNotFoundError:
         print(f"Error: Could not find data.")
         exit()
 
-# 🚨 [핵심 수정] 무직/은퇴자의 근로시간 결측치를 0으로 채워 표본 증발(Selection Bias) 방지
+# 🚨 [Core Fix] Fill missing working hours for the unemployed/retired with 0 to prevent sample attrition (Selection Bias)
 if 'total_work_hr' in df.columns:
     df['total_work_hr'] = df['total_work_hr'].fillna(0)
 
 time_col = 'year' if 'year' in df.columns else 'wave'
 id_col = 'pid' if 'pid' in df.columns else 'id'
 
-# DV는 오직 Social Satisfaction 1개로 고정
+# DV is strictly fixed to 1 variable: Social Satisfaction
 dv = "dv1_social_sat"
 
 # =============================================================================

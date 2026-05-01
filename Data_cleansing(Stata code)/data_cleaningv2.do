@@ -19,7 +19,7 @@ forvalues w = 1/27 {
         display "===== Processing Wave `w' ====="
         
         * -----------------------------------------------------------
-        * (1) 가구(h) 파일 준비
+        * (1) Prepare household (h) file
         * -----------------------------------------------------------
         cap confirm file "klips`ww'h.dta"
         if _rc == 0 {
@@ -34,10 +34,10 @@ forvalues w = 1/27 {
             cap destring hhid, replace force
             cap duplicates drop hhid, force
             
-            * 주관적 경제상태 (h2705: 1~27차 공통)
+            * Subjective economic status (h2705: common across waves 1~27)
             cap rename h`ww'2705 subj_econ_status
             
-            * 객관적 월 소득 3종 합산 (4~27차만 존재)
+            * Sum of 3 objective monthly income types (exists only in waves 4~27)
             gen monthly_income = .
             if `w' >= 4 {
                 cap rename h`ww'2202 inc_labor
@@ -55,7 +55,7 @@ forvalues w = 1/27 {
                 }
             }
             
-            * 가구주 성별 및 출생년도 추출 로직
+            * Logic to extract household head's gender and birth year
             gen h_head_gender = .
             gen h_head_birth_year = .
             
@@ -74,7 +74,7 @@ forvalues w = 1/27 {
                 }
             }
             
-            * 왕래 빈도
+            * Frequency of contact
             cap rename h`ww'1103 p_contact_none
             cap rename h`ww'1104 p_contact_m
             cap rename h`ww'1105 p_contact_y
@@ -90,7 +90,7 @@ forvalues w = 1/27 {
         }
 
         * -----------------------------------------------------------
-        * (2) 개인(p) 파일 준비
+        * (2) Prepare individual (p) file
         * -----------------------------------------------------------
         use "klips`ww'p.dta", clear
         rename *, lower
@@ -110,20 +110,20 @@ forvalues w = 1/27 {
         cap rename p`ww'6101 health_raw
         cap rename p`ww'6508 life_sat_raw
         
-        * [추가] 근로시간 및 초과근무 추출 (Time Poverty)
-        cap rename p`ww'1003 reg_fixed     // 정규근로시간 정해져 있는가? (1:예, 2:아니오)
-        cap rename p`ww'1004 reg_hr_no     // (아니오) 일주일 평균 시간
-        cap rename p`ww'1005 reg_day_no    // (아니오) 일주일 평균 일
-        cap rename p`ww'1006 reg_hr_yes    // (예) 일주일 평균 시간
-        cap rename p`ww'1007 reg_day_yes   // (예) 일주일 평균 일
+        * [Addition] Extract working hours and overtime (Time Poverty)
+        cap rename p`ww'1003 reg_fixed      // Are regular working hours fixed? (1:Yes, 2:No)
+        cap rename p`ww'1004 reg_hr_no      // (If No) Average hours per week
+        cap rename p`ww'1005 reg_day_no     // (If No) Average days per week
+        cap rename p`ww'1006 reg_hr_yes     // (If Yes) Average hours per week
+        cap rename p`ww'1007 reg_day_yes    // (If Yes) Average days per week
         
-        cap rename p`ww'1011 ot_exists     // 초과근무 여부 (1:없다, 2:있다)
-        cap rename p`ww'1019 ot_period     // 주/월 구분 (1:주, 2:월 추정)
-        cap rename p`ww'1012 ot_hr         // 초과근무 시간
-        cap rename p`ww'1013 ot_day        // 초과근무 일
+        cap rename p`ww'1011 ot_exists      // Overtime existence (1:No, 2:Yes)
+        cap rename p`ww'1019 ot_period      // Weekly/Monthly classification (1:Week, 2:Month estimated)
+        cap rename p`ww'1012 ot_hr          // Overtime hours
+        cap rename p`ww'1013 ot_day         // Overtime days
 
         * -----------------------------------------------------------
-        * (3) 병합
+        * (3) Merge
         * -----------------------------------------------------------
         cap merge m:1 hhid using "`h_temp'"
         if _rc == 0 {
@@ -132,7 +132,7 @@ forvalues w = 1/27 {
         }
         gen year = 1997 + `w'
         
-        * [추가] keepvars에 근로시간 변수들 포함
+        * [Addition] Include working hour variables in keepvars
         local keepvars pid hhid year h_head_gender h_head_birth_year ///
             feeling_poor_raw subj_econ_status sat_social_raw ///
             free_time_1 free_time_2 free_time_3 ///
@@ -151,7 +151,7 @@ forvalues w = 1/27 {
         }
         keep `keepvars'
         
-        * 음수(-1: 모름/무응답 등) 결측치 처리
+        * Handle negative missing values (-1: don't know/no response, etc.)
         foreach var of varlist _all {
             if "`var'" != "monthly_income" {
                 cap replace `var' = . if `var' < 0
@@ -176,7 +176,7 @@ foreach file of local filelist {
 rename h_head_gender gender
 rename h_head_birth_year birth_year
 
-* --- [DV 생성] ---
+* --- [DV Generation] ---
 gen dv1_social_sat = 6 - sat_social_raw
 foreach target in p i c {
     gen `target'_freq = .
@@ -186,7 +186,7 @@ foreach target in p i c {
 }
 egen dv2_family_freq = rowtotal(p_freq i_freq c_freq), missing
 
-* --- [IV 및 통제변수] ---
+* --- [IV and Control Variables] ---
 gen feeling_poor = feeling_poor_raw
 gen feeling_poor_h = subj_econ_status
 
@@ -197,25 +197,25 @@ gen health = 6 - health_raw
 gen life_sat = 6 - life_sat_raw
 gen age = year - birth_year
 
-* --- [NEW: Time Poverty (총 주당 근로시간) 변수 생성] ---
+* --- [NEW: Time Poverty (Total weekly working hours) variable generation] ---
 
-* 1. 정규 근로시간 (주당 시간 기준)
+* 1. Regular working hours (based on weekly hours)
 gen reg_work_hr = .
 replace reg_work_hr = reg_hr_yes if reg_fixed == 1
 replace reg_work_hr = reg_hr_no if reg_fixed == 2
 
-* 2. 초과 근로시간 (주당 시간 기준 변환)
+* 2. Overtime hours (converted to weekly hours)
 gen ot_weekly_hr = 0
-* 비경제활동인구 등 정규 근로시간이 없는 경우 초과근로시간도 missing으로 통일
+* Standardize overtime to missing if there are no regular working hours (e.g., economically inactive population)
 replace ot_weekly_hr = . if missing(reg_work_hr)
 
-* 초과근무가 있다고 응답한 경우 (ot_exists == 2)
-* ot_period == 2 (월 단위)인 경우, 한 달을 4.345주로 가정하고 주당 시간으로 환산
+* If responded yes to overtime (ot_exists == 2)
+* If ot_period == 2 (monthly basis), assume a month has 4.345 weeks and convert to weekly hours
 replace ot_weekly_hr = ot_hr if ot_exists == 2 & (ot_period == 1 | missing(ot_period))
 replace ot_weekly_hr = ot_hr / 4.345 if ot_exists == 2 & ot_period == 2
 
-* 3. 총 주당 근로시간 (Total Weekly Working Hours)
-* 결측치가 하나라도 있으면 missing 처리하여 데이터 왜곡 방지
+* 3. Total Weekly Working Hours
+* Treat as missing if any missing value exists to prevent data distortion
 egen total_work_hr = rowtotal(reg_work_hr ot_weekly_hr), missing
 
 

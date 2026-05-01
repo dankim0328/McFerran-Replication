@@ -20,7 +20,7 @@ forvalues w = 1/27 {
     if _rc == 0 {
         display "===== Processing Wave `w' ====="
         
-        * (1) 가구(h) 파일 준비
+        * (1) Prepare household (h) file
         cap confirm file "klips`ww'h.dta"
         if _rc == 0 {
             use "klips`ww'h.dta", clear
@@ -34,10 +34,10 @@ forvalues w = 1/27 {
             cap destring hhid, replace force
             cap duplicates drop hhid, force
             
-            * 주관적 경제상태 (h2705: 1~27차 공통)
+            * Subjective economic status (h2705: common across waves 1~27)
             cap rename h`ww'2705 subj_econ_status
             
-            * 객관적 월 소득 3종 합산 (4~27차만 존재)
+            * Sum of 3 objective monthly income types (exists only in waves 4~27)
             gen monthly_income = .
             if `w' >= 4 {
                 cap rename h`ww'2202 inc_labor
@@ -55,11 +55,11 @@ forvalues w = 1/27 {
                 }
             }
             
-            * [수정] 가구주 성별 및 출생년도 추출 로직 (에러 수정)
+            * [Fix] Logic to extract household head's gender and birth year (error fixed)
             gen h_head_gender = .
             gen h_head_birth_year = .
             
-            * 1~15번 가구원 순회 (에러가 나지 않는 원초적 문자열 결합 방식)
+            * Loop through household members 1~15 (primitive string concatenation to avoid errors)
             forvalues i = 1/15 {
                 local n_gen = 240 + `i'
                 local v_gen "0`n_gen'"
@@ -72,13 +72,13 @@ forvalues w = 1/27 {
                 
                 cap confirm variable h`ww'`v_rel'
                 if _rc == 0 {
-                    * 관계 코드가 10 (가구주 본인)인 경우 데이터 가져오기
+                    * Get data if relationship code is 10 (household head)
                     cap replace h_head_gender = h`ww'`v_gen' if h`ww'`v_rel' == 10
                     cap replace h_head_birth_year = h`ww'`v_byr' if h`ww'`v_rel' == 10
                 }
             }
             
-            * 왕래 빈도
+            * Frequency of contact
             cap rename h`ww'1103 p_contact_none
             cap rename h`ww'1104 p_contact_m
             cap rename h`ww'1105 p_contact_y
@@ -93,7 +93,7 @@ forvalues w = 1/27 {
             save "`h_temp'", replace
         }
         
-        * (2) 개인(p) 파일 준비
+        * (2) Prepare individual (p) file
         use "klips`ww'p.dta", clear
         rename *, lower
         
@@ -112,7 +112,7 @@ forvalues w = 1/27 {
         cap rename p`ww'6101 health_raw
         cap rename p`ww'6508 life_sat_raw
         
-        * (3) 병합
+        * (3) Merge
         cap merge m:1 hhid using "`h_temp'"
         if _rc == 0 {
             keep if _merge == 3
@@ -121,7 +121,7 @@ forvalues w = 1/27 {
         
         gen year = 1997 + `w'
         
-        * [수정] region_code 제거 및 h_head 정보 포함
+        * [Fix] Remove region_code and include h_head information
         local keepvars pid hhid year h_head_gender h_head_birth_year ///
                        feeling_poor_raw subj_econ_status sat_social_raw ///
                        free_time_1 free_time_2 free_time_3 ///
@@ -155,11 +155,11 @@ foreach file of local filelist {
     append using "`file'"
 }
 
-* [수정] 가구주 정보로 최종 변수 덮어쓰기
+* [Fix] Overwrite final variables with household head information
 rename h_head_gender gender
 rename h_head_birth_year birth_year
 
-* --- [변수 생성] ---
+* --- [Variable Generation] ---
 gen dv1_social_sat = 6 - sat_social_raw
 
 foreach target in p i c {
@@ -169,14 +169,14 @@ foreach target in p i c {
     replace `target'_freq = 0 if `target'_contact_none == 3
 }
 
-* [수정] Max 대신 Sum 적용 (모두 missing일 때만 missing 처리)
+* [Fix] Apply Sum instead of Max (treat as missing only if all are missing)
 egen dv2_family_freq = rowtotal(p_freq i_freq c_freq), missing
 
-* --- [IV 및 통제변수] ---
+* --- [IV and Control Variables] ---
 gen feeling_poor = feeling_poor_raw
 gen feeling_poor_h = subj_econ_status
 
-* [표준화 로직] 로그 변환 후 전체 기간 표준화
+* [Standardization Logic] Log transformation followed by standardization across the entire period
 gen log_income = ln(monthly_income + 1)
 egen std_log_income = std(log_income)
 
